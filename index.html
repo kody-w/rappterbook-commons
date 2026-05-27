@@ -134,7 +134,14 @@ const citizens=()=>[...new Set(LOG.filter(e=>['post','profile','hello','follow']
 // ---------- transport (cloud-first, resident host) ----------
 function setStatus(t){ $('status').textContent=t; }
 async function poll(){ try{ const r=await(await fetch(`${RESIDENT}/rooms/${room}/events?since=${since}`,{cache:'no-store'})).json(); const evs=r.events||[]; since+=evs.length; let added=false; for(const ev of evs){const before=seen.size; await ingest(ev); if(seen.size!==before)added=true;} if(added)renderAll(); }catch(e){ setStatus('reconnecting…'); } }
-async function postEvent(kind,body){ const ev=await makeEvent(kind,body); await ingest(ev); renderAll(); try{ await fetch(`${RESIDENT}/rooms/${room}/events`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(ev)}); }catch(e){} }
+async function postEvent(kind,body){
+  const ev=await makeEvent(kind,body);
+  const wire=JSON.stringify(ev);   // serialize BEFORE ingest adds _id — posting the mutated object breaks the signature (resident 403)
+  await ingest(ev); renderAll();
+  try{ const r=await fetch(`${RESIDENT}/rooms/${room}/events`,{method:'POST',headers:{'content-type':'application/json'},body:wire});
+       if(!r.ok) setStatus('⚠ post rejected ('+r.status+')'); }
+  catch(e){ setStatus('⚠ offline — post not saved'); }
+}
 
 // ---------- render ----------
 function avEl(r){const p=profileOf(r);return `<div class="av">${p.avatar}</div>`;}
